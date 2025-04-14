@@ -702,7 +702,7 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data)
 			websocket_handler(nc, ev_data);
 		else if (mg_match(hm->uri, mg_str("/restart"), NULL))
 			restart_handler(nc, ev_data);
-		else
+		else if (!strlen(s_http_server_opts.root_dir))
 			mg_http_serve_dir(nc, ev_data, &s_http_server_opts);
 	} else if (nc->data[0] != 'M' && nc->data[0] != 'W' && ev == MG_EV_READ) {
 		struct mg_http_message hm;
@@ -765,9 +765,7 @@ static int mongoose_settings(void *elem, void  __attribute__ ((__unused__)) *dat
 	char tmp[128];
 
 	GET_FIELD_STRING_RESET(LIBCFG_PARSER, elem, "document_root", tmp);
-	if (strlen(tmp)) {
-		opts->root = strdup(tmp);
-	}
+	opts->root = strdup(tmp);
 
 	GET_FIELD_BOOL(LIBCFG_PARSER, elem, "enable_directory_listing",
 		  &opts->listing);
@@ -919,8 +917,7 @@ int start_mongoose(const char *cfgfname, int argc, char *argv[])
 		}
 	}
 
-	s_http_server_opts.root_dir =
-		opts.root ? opts.root : MG_ROOT;
+	s_http_server_opts.root_dir = opts.root ? opts.root : MG_ROOT;
 	if (!opts.listing)
 		s_http_server_opts.fs = &fs_posix_no_list;
 	global_auth_file = opts.global_auth_file;
@@ -963,8 +960,14 @@ int start_mongoose(const char *cfgfname, int argc, char *argv[])
 
 	mg_wakeup_init(&mgr);
 
-	INFO("Mongoose web server v%s with PID %d listening on %s and serving %s",
-		MG_VERSION, getpid(), url, s_http_server_opts.root_dir);
+	if (strlen(s_http_server_opts.root_dir) == 0)
+		INFO("Mongoose web server v%s with PID %d listening on %s",
+		MG_VERSION, getpid(), url);
+	else
+		INFO("Mongoose web server v%s with PID %d listening on %s "
+				"and serving %s",
+				MG_VERSION, getpid(),
+				url, s_http_server_opts.root_dir);
 
 	while (s_signo == 0)
 		mg_mgr_poll(&mgr, 100);
